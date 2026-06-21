@@ -44,7 +44,10 @@ Discord  <->  Node bot (discord.js)  <->  Lavalink.jar (Java, :2333)  <->  YouTu
 
 1. JDK 21 runs `Lavalink.jar` (the audio node on port 2333); it downloads its own plugins on first boot.
 2. Node 22 runs this bot, which connects to Lavalink at `localhost:2333` and to Discord.
-3. Optionally, a Docker `yt-cipher` container as a YouTube reliability upgrade.
+3. A small `spotify-tokener` process (port 8080) supplies Spotify's anonymous token so playlists and albums resolve reliably.
+
+All three run **natively** (no Docker) for the lowest audio latency. A Docker `yt-cipher`
+container is available only as an optional YouTube-hardening fallback.
 
 Running on a residential (home) IP is intentional: YouTube rate-limits datacenter IPs
 (403/429), so a home connection avoids that bot-flagging without a paid proxy.
@@ -55,8 +58,10 @@ Running on a residential (home) IP is intentional: YouTube rate-limits datacente
 |---|---|
 | JDK 21 (Temurin) | `winget install EclipseAdoptium.Temurin.21.JDK` |
 | Node.js 22+ | `winget install OpenJS.NodeJS.LTS` |
-| NSSM (for the 24/7 service) | `winget install NSSM.NSSM` |
-| Docker Desktop (optional) | only for the yt-cipher upgrade |
+| NSSM (for the 24/7 services) | `winget install NSSM.NSSM` |
+| Go (builds spotify-tokener) | `winget install GoLang.Go` |
+| Chrome (used by spotify-tokener) | `winget install Google.Chrome` |
+| Docker Desktop (optional) | only as a fallback for spotify-tokener / yt-cipher |
 
 ## Installation
 
@@ -73,7 +78,8 @@ No privileged gateway intents are required; the bot is slash-command only.
 **2. Obtain Spotify credentials** (required to resolve Spotify links)
 
 Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
-and copy the Client ID and Client Secret.
+and copy the Client ID and Client Secret. A Development-mode app is fine — playlists and albums
+are resolved through a local anonymous-token service (`spotify-tokener`, set up in step 5).
 
 **3. Install dependencies and configure**
 
@@ -91,7 +97,17 @@ Copy-Item lavalink/application.example.yml lavalink/application.yml
 
 See [`lavalink/README.md`](lavalink/README.md) for details and optional reliability upgrades.
 
-**5. Register the slash commands**
+**5. Build the Spotify token service**
+
+Spotify playlists/albums are resolved with an anonymous (web-player) token served locally by
+[spotify-tokener](https://github.com/topi314/spotify-tokener). Build it once — this installs Go
+and Chrome if they're missing and produces `bin/spotify-tokener.exe`:
+
+```powershell
+./scripts/get-tokener.ps1
+```
+
+**6. Register the slash commands**
 
 Set `DEV_GUILD_ID` in `.env` to your server's ID for instant registration, then:
 
@@ -104,7 +120,8 @@ Without `DEV_GUILD_ID`, commands register globally and may take up to an hour to
 ## Configuration
 
 All configuration lives in `.env` (copied from `.env.example`). Required variables are
-validated on startup; the bot exits with a clear message if any are missing.
+validated on startup; the bot exits with a clear message if any are missing. (Spotify links are
+resolved through the local `spotify-tokener` service rather than the Web API directly.)
 
 | Variable | Required | Description |
 |---|---|---|
@@ -132,19 +149,24 @@ cd lavalink ; java -Xmx1g -jar Lavalink.jar
 npm run dev
 ```
 
+> Spotify playlists in dev also need the token service: run `bin\spotify-tokener.exe` (after
+> `./scripts/get-tokener.ps1`), or simply install the services below.
+
 **Production (Windows services via NSSM)** — run from an elevated PowerShell:
 
 ```powershell
 ./scripts/install-services.ps1
 ```
 
-This registers two services, `Lavalink` and `DiscordMusicBot`, that start automatically on
-boot (before login), restart on failure, and run headless. Manage them with:
+This registers three services — `SpotifyTokener`, `Lavalink`, and `DiscordMusicBot` — that start
+automatically on boot (before login), restart on failure, and run headless. No Docker, no open
+terminals. Manage them with:
 
 ```powershell
-nssm restart Lavalink ; nssm restart DiscordMusicBot
+nssm restart SpotifyTokener ; nssm restart Lavalink ; nssm restart DiscordMusicBot
 nssm status  DiscordMusicBot
-./scripts/uninstall-services.ps1     # remove the services
+Invoke-RestMethod http://localhost:8080/api/token   # check the token service is alive
+./scripts/uninstall-services.ps1                    # remove the services
 ```
 
 ## Commands
@@ -153,7 +175,7 @@ nssm status  DiscordMusicBot
 |---|---|
 | `/play <query>` | Play a YouTube/Spotify URL (incl. playlist or album), or search a query (shows a top-5 picker) |
 | `/queue` | Paginated queue (10 per page) |
-| `/nowplaying` | Now playing — progress bar, source, loop, volume |
+| `/nowplaying` | Now playing — live (auto-updating) progress bar, source, loop, volume |
 | `/skip [count]` | Skip the current track (or several) |
 | `/previous` | Play the previous track from history |
 | `/seek <time>` | Seek to `mm:ss` or a number of seconds |
@@ -168,6 +190,7 @@ nssm status  DiscordMusicBot
 | `/disconnect` | Disconnect the bot and clear state |
 | `/autoplay <on\|off>` | Toggle radio mode when the queue empties |
 | `/lyrics` | Show lyrics for the current track |
+| `/help` | List every command with a short description |
 
 The now-playing message includes a control panel (previous, pause, skip, stop, shuffle, loop)
 that only responds to users in the same voice channel.
@@ -192,7 +215,7 @@ Lavalink, and confirm playback continues from SoundCloud (the source switch appe
 | Slash commands don't appear | Run `npm run deploy`; set `DEV_GUILD_ID` for instant registration |
 | "I'm already in another voice channel" | The bot is playing elsewhere — use `/disconnect` or join it |
 | YouTube fails (403/429) | Enable OAuth or yt-cipher ([`lavalink/README.md`](lavalink/README.md)); SoundCloud fallback works meanwhile |
-| Spotify link finds no audio | Verify `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` |
+| Spotify finds no audio (esp. playlists) | Check the `SpotifyTokener` service: `Invoke-RestMethod http://localhost:8080/api/token` should return a token |
 | `/lyrics` returns nothing | Ensure `lavalyrics-plugin` is installed in `application.yml` |
 | Lavalink crashes on startup | Check indentation — `plugins:` is a root key, not under `lavalink:` |
 
@@ -207,7 +230,7 @@ src/
   deploy-commands.ts  Slash-command registration
   lavalink/           Manager, events (Layer-3 fallback), autoplay
   events/             ready, interactionCreate (router), voiceStateUpdate
-  commands/           18 slash commands
+  commands/           19 slash commands
   ui/                 Embeds and now-playing controls
   lib/                Formatting, pagination, resolution, guards, loaders
   db/                 Per-server settings (better-sqlite3)
