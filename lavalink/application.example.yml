@@ -1,0 +1,128 @@
+# ════════════════════════════════════════════════════════════════════════
+#  Lavalink configuration — copy this file to `application.yml` next to
+#  Lavalink.jar before first run.  Secrets are read from environment variables
+#  (the NSSM service injects them from your .env — see scripts/install-services.ps1).
+#
+#  ⚠ Plugin versions move fast. Verify the latest at build time:
+#     youtube-source : https://github.com/lavalink-devs/youtube-source/releases
+#     LavaSrc        : https://github.com/topi314/LavaSrc/releases
+#  Verified known-good baseline: June 2026.
+# ════════════════════════════════════════════════════════════════════════
+
+server:
+  port: 2333
+  address: 0.0.0.0          # localhost is fine when the bot is on the same host
+  http2:
+    enabled: false
+
+lavalink:
+  plugins:
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.1"
+      repository: "https://maven.lavalink.dev/releases"
+      snapshot: false
+    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.3"
+      repository: "https://maven.lavalink.dev/releases"
+      snapshot: false
+    - dependency: "com.github.topi314.lavasearch:lavasearch-plugin:1.0.0"
+      repository: "https://maven.lavalink.dev/releases"
+      snapshot: false
+    # LavaLyrics powers the /lyrics command (with LRCLIB via LavaSrc below).
+    # Verify the latest tag at https://github.com/topi314/LavaLyrics/releases
+    - dependency: "com.github.topi314.lavalyrics:lavalyrics-plugin:1.0.0"
+      repository: "https://maven.lavalink.dev/releases"
+      snapshot: false
+
+  server:
+    password: "${LAVALINK_PASSWORD}"
+    sources:
+      youtube: false        # MUST be false — native YT is deprecated; the plugin handles YT
+      soundcloud: true       # no-auth fallback source (scsearch:) — keep ON
+      bandcamp: true
+      twitch: true
+      vimeo: true
+      http: true
+      local: false
+    bufferDurationMs: 400
+    frameBufferDurationMs: 5000
+    youtubePlaylistLoadLimit: 6   # pages of 100
+    playerUpdateInterval: 5
+    soundcloudSearchEnabled: true
+    # ratelimit / proxy block only needed on datacenter IPs — omitted for home hosting
+
+# ── 'plugins' is a ROOT key (NOT under 'lavalink:'). Watch the indentation. ──
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    # Clients are tried in order (Layer-1 internal fallback). Verified valid for
+    # youtube-source 1.18.x. Names change between versions — if Lavalink logs
+    # "Failed to resolve <CLIENT> into a Client", fix this list against the README:
+    # https://github.com/lavalink-devs/youtube-source#available-clients
+    clients:
+      - MUSIC
+      - WEB
+      - WEBEMBEDDED
+      - ANDROID_VR
+      - TVHTML5_SIMPLY
+    # ── Optional reliability upgrades (leave commented for first boot) ──────
+    # OAuth: on first run the log prints a device code; authorise at
+    # https://google.com/device with a BURNER Google account, then paste the
+    # printed refresh token here.
+    # oauth:
+    #   enabled: true
+    #   refreshToken: "${YT_OAUTH_REFRESH_TOKEN}"
+    #   skipInitialization: true
+    # poToken — pair with a refresh/generated token if you hit bot checks:
+    # pot:
+    #   token: "${YT_PO_TOKEN}"
+    #   visitorData: "${YT_VISITOR_DATA}"
+    # Remote cipher server (recommended hardening) — run via docker-compose:
+    # remoteCipher:
+    #   url: "http://localhost:8001"
+    #   password: "${YT_CIPHER_PASSWORD}"
+
+  lavasrc:
+    # Layer-2 cross-source fallback chain. Tried in order until one returns audio.
+    providers:
+      - "dzisrc:%ISRC%"          # 1. Deezer by ISRC (no-op until arl + key are set)
+      - "ytsearch:\"%ISRC%\""    # 2. YouTube exact ISRC match
+      - "ytmsearch:%QUERY%"      # 3. YouTube Music (best metadata match)
+      - "ytsearch:%QUERY%"       # 4. YouTube search
+      - "scsearch:%QUERY%"       # 5. SoundCloud — final no-auth fallback (survives a YT outage)
+    sources:
+      spotify: true
+      applemusic: false
+      deezer: false              # set true only after providing arl + masterDecryptionKey
+      youtube: true              # enables ytsearch metadata for LavaSearch
+      soundcloud: false          # built-in SC source already handles scsearch; keep false here
+    lyrics-sources:
+      spotify: false
+      youtube: false
+      lrcLib: true               # free, no-auth lyrics for /lyrics
+    spotify:
+      clientId: "${SPOTIFY_CLIENT_ID}"
+      clientSecret: "${SPOTIFY_CLIENT_SECRET}"
+      countryCode: "SK"
+      playlistLoadLimit: 6
+      albumLoadLimit: 6
+      resolveArtistsInSearch: true
+      # Only needed for Spotify-GENERATED playlists / recommendations / lyrics.
+      # Run topi314/spotify-tokener and point here:
+      # customTokenEndpoint: "http://localhost:8080/api/token"
+    # deezer:
+    #   arl: "${DEEZER_ARL}"
+    #   masterDecryptionKey: "${DEEZER_MASTER_KEY}"
+    #   formats: ["MP3_320", "MP3_256", "MP3_128"]
+
+logging:
+  level:
+    root: INFO
+    lavalink: INFO
+  file:
+    path: ./logs/
+  logback:
+    rollingpolicy:
+      max-history: 7
+      max-file-size: 25MB

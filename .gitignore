@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Secrets & env
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+
+# Logs
+*.log
+logs/
+lavalink/logs/
+
+# SQLite data
+data/
+*.db
+*.db-journal
+*.sqlite
+
+# Lavalink runtime artifacts (downloaded / generated, not committed)
+lavalink/Lavalink.jar
+lavalink/application.yml
+lavalink/plugins/
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/

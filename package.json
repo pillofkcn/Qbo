@@ -1,0 +1,30 @@
+{
+  "name": "discord-music-bot",
+  "version": "1.0.0",
+  "description": "Self-hosted, free Discord music bot (YouTube + Spotify) on Lavalink v4 + discord.js v14 + lavalink-client.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "deploy": "tsx src/deploy-commands.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "discord.js": "^14.26.0",
+    "dotenv": "^16.4.7",
+    "lavalink-client": "^2.10.0",
+    "pino": "^9.6.0",
+    "tsx": "^4.19.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.0",
+    "pino-pretty": "^13.0.0",
+    "typescript": "^5.7.0"
+  }
+}

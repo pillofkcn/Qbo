@@ -1,0 +1,27 @@
+# Optional reliability services. NOT required for first boot.
+# Lavalink + the bot run natively on Windows (as NSSM services); only enable
+# these if you later want the YouTube reliability hardening.
+#
+#   docker compose up -d yt-cipher
+#
+# Then uncomment the `remoteCipher` block in lavalink/application.yml and point
+# it at http://localhost:8001 (set YT_CIPHER_PASSWORD in your .env).
+
+services:
+  yt-cipher:
+    image: ghcr.io/kikkia/yt-cipher:latest   # verify the tag at build time
+    container_name: yt-cipher
+    restart: unless-stopped
+    environment:
+      - API_PASSWORD=${YT_CIPHER_PASSWORD}
+    ports:
+      - "8001:8001"
+
+  # Enable only if you need Spotify GENERATED playlists / recommendations / lyrics.
+  # Then set lavasrc.spotify.customTokenEndpoint: "http://localhost:8080/api/token".
+  # spotify-tokener:
+  #   image: ghcr.io/topi314/spotify-tokener:latest
+  #   container_name: spotify-tokener
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8080:8080"
