@@ -24,7 +24,7 @@
 #>
 $ErrorActionPreference = "Stop"
 
-# ── must be admin ────────────────────────────────────────────────────────
+# --- must be admin ---
 $admin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
     ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $admin) { throw "Please run this script in an elevated (Administrator) PowerShell." }
@@ -32,7 +32,7 @@ if (-not $admin) { throw "Please run this script in an elevated (Administrator) 
 $repo = (Resolve-Path "$PSScriptRoot\..").Path
 $lavalinkDir = Join-Path $repo "lavalink"
 
-# ── tool checks ──────────────────────────────────────────────────────────
+# --- tool checks ---
 function Require-Command($name, $hint) {
     $cmd = Get-Command $name -ErrorAction SilentlyContinue
     if (-not $cmd) { throw "$name not found. $hint" }
@@ -63,7 +63,7 @@ if (-not (Test-Path $chrome)) {
     throw "Chrome missing at $chrome (needed by spotify-tokener). Install: winget install Google.Chrome"
 }
 
-# ── parse .env into NAME=VALUE entries ───────────────────────────────────
+# --- parse .env into NAME=VALUE entries ---
 $envEntries = @()
 foreach ($line in Get-Content (Join-Path $repo ".env")) {
     $t = $line.Trim()
@@ -80,7 +80,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $repo "logs") | Out-Null
 
 function Install-Service($name, $app, $params, $workdir, $envExtra, $depends) {
     if (Get-Service $name -ErrorAction SilentlyContinue) {
-        Write-Host "Service '$name' exists — reconfiguring..." -ForegroundColor Yellow
+        Write-Host "Service '$name' exists - reconfiguring..." -ForegroundColor Yellow
         & nssm stop $name | Out-Null
     } else {
         & nssm install $name $app

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Stop and remove the Lavalink + DiscordMusicBot Windows services.
+  Stop and remove the Lavalink + DiscordMusicBot + SpotifyTokener Windows services.
 .DESCRIPTION
   Run from an elevated (Administrator) PowerShell.
 #>
@@ -16,7 +16,7 @@ foreach ($name in @("DiscordMusicBot", "Lavalink", "SpotifyTokener")) {
         & nssm stop $name | Out-Null
         & nssm remove $name confirm | Out-Null
     } else {
-        Write-Host "Service '$name' not installed — skipping."
+        Write-Host "Service '$name' not installed - skipping."
     }
 }
 Write-Host "Done." -ForegroundColor Green

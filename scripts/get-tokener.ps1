@@ -5,11 +5,11 @@
 .DESCRIPTION
   Spotify playlists/albums need an anonymous (web-player) token. We serve it locally
   with topi314/spotify-tokener on 127.0.0.1:8080 (LavaSrc customTokenEndpoint). This
-  script installs Go + Chrome if missing, builds the tokener via `go install`, and
+  script installs Go + Chrome if missing, builds the tokener via 'go install', and
   copies the binary to <repo>\bin\ so install-services.ps1 can run it as a service.
 
   Run from the repo root:  ./scripts/get-tokener.ps1
-  After Go/Chrome get installed you may need a NEW PowerShell so `go` is on PATH.
+  After Go/Chrome get installed you may need a NEW PowerShell so 'go' is on PATH.
 #>
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path "$PSScriptRoot\..").Path
@@ -22,7 +22,7 @@ function Refresh-Path {
                 [Environment]::GetEnvironmentVariable("Path", "User")
 }
 
-# ── Go ───────────────────────────────────────────────────────────────────
+# --- Go ---
 if (-not (Have "go")) {
     Write-Host "Go not found - installing via winget..." -ForegroundColor Yellow
     winget install --id GoLang.Go -e --accept-source-agreements --accept-package-agreements
@@ -32,7 +32,7 @@ if (-not (Have "go")) {
     }
 }
 
-# ── Chrome (runtime dependency of the tokener) ───────────────────────────
+# --- Chrome (runtime dependency of the tokener) ---
 $chrome = "C:\Program Files\Google\Chrome\Application\chrome.exe"
 if (-not (Test-Path $chrome)) {
     Write-Host "Chrome not found - installing via winget..." -ForegroundColor Yellow
@@ -42,7 +42,7 @@ if (-not (Test-Path $chrome)) {
     Write-Warning "Chrome not found at $chrome. If it's elsewhere, set SPOTIFY_TOKENER_CHROME_PATH accordingly."
 }
 
-# ── build ────────────────────────────────────────────────────────────────
+# --- build ---
 Write-Host "Building spotify-tokener via 'go install'..." -ForegroundColor Cyan
 go install github.com/topi314/spotify-tokener@master
 if ($LASTEXITCODE -ne 0) { throw "go install failed (exit $LASTEXITCODE)." }
