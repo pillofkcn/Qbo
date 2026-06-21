@@ -28,7 +28,7 @@ lavalink:
       snapshot: false
     # LavaLyrics powers the /lyrics command (with LRCLIB via LavaSrc below).
     # Verify the latest tag at https://github.com/topi314/LavaLyrics/releases
-    - dependency: "com.github.topi314.lavalyrics:lavalyrics-plugin:1.0.0"
+    - dependency: "com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0"
       repository: "https://maven.lavalink.dev/releases"
       snapshot: false
 
@@ -43,7 +43,7 @@ lavalink:
       http: true
       local: false
     bufferDurationMs: 400
-    frameBufferDurationMs: 5000
+    frameBufferDurationMs: 10000
     youtubePlaylistLoadLimit: 6   # pages of 100
     playerUpdateInterval: 5
     soundcloudSearchEnabled: true
@@ -108,9 +108,11 @@ plugins:
       playlistLoadLimit: 6
       albumLoadLimit: 6
       resolveArtistsInSearch: true
-      # Only needed for Spotify-GENERATED playlists / recommendations / lyrics.
-      # Run topi314/spotify-tokener and point here:
-      # customTokenEndpoint: "http://localhost:8080/api/token"
+      # Anonymous token endpoint (spotify-tokener). REQUIRED here: the Spotify app is in
+      # Development mode, so client credentials can't load playlists/albums/artists —
+      # this routes those through an anonymous (web-player-style) token. Run the
+      # spotify-tokener service from docker-compose.yml, then keep this pointed at it.
+      customTokenEndpoint: "http://localhost:8080/api/token"
     # deezer:
     #   arl: "${DEEZER_ARL}"
     #   masterDecryptionKey: "${DEEZER_MASTER_KEY}"

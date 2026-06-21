@@ -17,11 +17,13 @@ services:
     ports:
       - "8001:8001"
 
-  # Enable only if you need Spotify GENERATED playlists / recommendations / lyrics.
-  # Then set lavasrc.spotify.customTokenEndpoint: "http://localhost:8080/api/token".
-  # spotify-tokener:
-  #   image: ghcr.io/topi314/spotify-tokener:latest
-  #   container_name: spotify-tokener
-  #   restart: unless-stopped
-  #   ports:
-  #     - "8080:8080"
+  # Spotify token service. Needed because the Spotify app is in Development mode and
+  # client credentials can't reach playlist/album/artist endpoints — LavaSrc uses this
+  # for an anonymous token (like the web player). Pairs with
+  # lavasrc.spotify.customTokenEndpoint: "http://localhost:8080/api/token".
+  spotify-tokener:
+    image: ghcr.io/topi314/spotify-tokener:latest
+    container_name: spotify-tokener
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
