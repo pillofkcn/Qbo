@@ -17,6 +17,10 @@ interface NowPlayingRef {
   messageId: string;
 }
 
+/** How often the now-playing message is re-edited so the progress bar advances. */
+const NOW_PLAYING_TICK_MS = 2_000;
+const tickers = new Map<string, ReturnType<typeof setInterval>>();
+
 /** The two-row button control panel under the now-playing message (spec §10). */
 export function nowPlayingButtons(player: Player): ActionRowBuilder<ButtonBuilder>[] {
   const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -73,8 +77,32 @@ export async function updateNowPlaying(client: Client, player: Player): Promise<
   if (sent) player.setData("np", { channelId, messageId: sent.id } satisfies NowPlayingRef);
 }
 
+/**
+ * Live progress-bar updater: while a track is actively playing, re-edit the
+ * now-playing message on an interval so the bar advances on its own. Skips edits
+ * while paused/idle; cleared on stop/queueEnd/disconnect via clearNowPlaying.
+ */
+export function startNowPlayingTicker(client: Client, player: Player): void {
+  stopNowPlayingTicker(player.guildId);
+  const interval = setInterval(() => {
+    const p = client.lavalink.getPlayer(player.guildId);
+    if (!p || !p.queue.current || p.paused) return;
+    void updateNowPlaying(client, p);
+  }, NOW_PLAYING_TICK_MS);
+  tickers.set(player.guildId, interval);
+}
+
+export function stopNowPlayingTicker(guildId: string): void {
+  const t = tickers.get(guildId);
+  if (t) {
+    clearInterval(t);
+    tickers.delete(guildId);
+  }
+}
+
 /** Remove the now-playing message (on queueEnd / disconnect). */
 export async function clearNowPlaying(client: Client, player: Player): Promise<void> {
+  stopNowPlayingTicker(player.guildId);
   const ref = player.getData<NowPlayingRef>("np");
   if (!ref?.messageId) return;
   const channel = await fetchTextChannel(client, ref.channelId);

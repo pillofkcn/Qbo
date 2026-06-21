@@ -3,7 +3,7 @@ import type { LavalinkManager, Player, Track } from "lavalink-client";
 import { getGuildSettings } from "../db/settings.js";
 import { altSearchSource } from "../lib/resolve.js";
 import { logger } from "../logger.js";
-import { clearNowPlaying, updateNowPlaying } from "../ui/controls.js";
+import { clearNowPlaying, startNowPlayingTicker, updateNowPlaying } from "../ui/controls.js";
 import { errorEmbed } from "../ui/embeds.js";
 
 const MAX_RETRIES = 2;
@@ -28,6 +28,7 @@ export function registerLavalinkEvents(client: Client): void {
     );
     player.setData(retryKey(t?.info?.identifier), 0);
     await updateNowPlaying(client, player);
+    startNowPlayingTicker(client, player);
   });
 
   manager.on("trackEnd", (player, _track, payload) => {
