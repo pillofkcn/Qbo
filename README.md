@@ -107,15 +107,24 @@ and Chrome if they're missing and produces `bin/spotify-tokener.exe`:
 ./scripts/get-tokener.ps1
 ```
 
-**6. Register the slash commands**
+**6. Invite the bot and register the slash commands**
 
-Set `DEV_GUILD_ID` in `.env` to your server's ID for instant registration, then:
+Invite the bot to each server it should run in (OAuth2 → URL Generator, scopes `bot` +
+`applications.commands`, the permissions from step 1), then register the commands:
 
 ```powershell
 npm run deploy
 ```
 
-Without `DEV_GUILD_ID`, commands register globally and may take up to an hour to appear.
+`DEV_GUILD_ID` in `.env` controls where commands appear:
+
+- **One or more server IDs, comma-separated** (e.g. `DEV_GUILD_ID=123,456`) → commands appear on
+  those servers **instantly**. The bot must already be in each listed server.
+- **Blank** → commands register **globally** (every server the bot joins), but can take up to ~1h.
+
+> **Adding another server later:** invite the bot to it, append its ID to `DEV_GUILD_ID`
+> (`123,456,789`), and run `npm run deploy` again — commands appear there instantly. Guild
+> registration also clears the global set, so you never end up with duplicate commands.
 
 ## Configuration
 

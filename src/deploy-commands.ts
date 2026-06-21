@@ -8,8 +8,9 @@ import type { Command } from "./types/index.js";
 
 /**
  * Registers slash commands with Discord.
- * - If DEV_GUILD_ID is set -> registers to that guild (appears instantly).
- * - Otherwise -> registers globally (can take up to ~1h to propagate).
+ * - DEV_GUILD_ID set (one or more comma-separated guild IDs) -> registers to each
+ *   guild instantly, and clears the global set so commands never appear twice.
+ * - Blank -> registers globally (works on every server, can take up to ~1h to propagate).
  *
  * Run with: npm run deploy
  */
@@ -32,21 +33,34 @@ async function main(): Promise<void> {
   const body = await collectCommandData();
   const rest = new REST({ version: "10" }).setToken(config.discord.token);
 
-  if (config.discord.devGuildId) {
-    await rest.put(
-      Routes.applicationGuildCommands(config.discord.clientId, config.discord.devGuildId),
-      { body },
-    );
-    logger.info(
-      { count: body.length, guild: config.discord.devGuildId },
-      "registered guild commands (instant)",
-    );
-  } else {
+  // DEV_GUILD_ID may be empty, one ID, or several comma-separated IDs. Guild
+  // commands are INSTANT, so register to each listed guild; empty -> global.
+  const guildIds = config.discord.devGuildId
+    .split(",")
+    .map((g) => g.trim())
+    .filter((g) => g.length > 0);
+
+  if (guildIds.length === 0) {
     await rest.put(Routes.applicationCommands(config.discord.clientId), { body });
     logger.info(
       { count: body.length },
       "registered GLOBAL commands (may take up to ~1h to appear)",
     );
+    return;
+  }
+
+  // Clear the global set first so it can't appear as duplicates of the per-guild commands.
+  await rest.put(Routes.applicationCommands(config.discord.clientId), { body: [] });
+  for (const guildId of guildIds) {
+    try {
+      await rest.put(Routes.applicationGuildCommands(config.discord.clientId, guildId), { body });
+      logger.info({ count: body.length, guild: guildId }, "registered guild commands (instant)");
+    } catch (err) {
+      logger.error(
+        { err, guild: guildId },
+        "failed to register commands for guild — is the bot invited to it?",
+      );
+    }
   }
 }
 
