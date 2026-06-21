@@ -27,7 +27,7 @@ export function createLavalinkManager(client: Client): LavalinkManager {
     emitNewSongsOnly: true,
     client: {
       id: config.discord.clientId,
-      username: "Queuebo",
+      username: "Qbo",
     },
     playerOptions: {
       defaultSearchPlatform: config.bot.defaultSearchPlatform as SearchPlatform,

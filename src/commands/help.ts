@@ -16,7 +16,7 @@ const command: Command = {
 
     const embed = new EmbedBuilder()
       .setColor(ACCENT)
-      .setAuthor({ name: "🎶 Queuebo — commands" })
+      .setAuthor({ name: "🎶 Qbo — commands" })
       .setDescription(lines)
       .setFooter({ text: "Tip: type / in the chat to see these inline with autocomplete." });
 

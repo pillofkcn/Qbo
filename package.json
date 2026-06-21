@@ -1,5 +1,5 @@
 {
-  "name": "discord-music-bot",
+  "name": "qbo",
   "version": "1.0.0",
   "description": "Self-hosted, free Discord music bot (YouTube + Spotify) on Lavalink v4 + discord.js v14 + lavalink-client.",
   "type": "module",

@@ -1,6 +1,6 @@
-# Queuebo
+# Qbo
 
-Queuebo is a self-hosted Discord music bot that plays from YouTube and Spotify (including
+Qbo is a self-hosted Discord music bot that plays from YouTube and Spotify (including
 playlists) with a paginated queue, full playback controls, and automatic source fallback when
 YouTube is unavailable. Designed to run on a single always-on home machine — no paid APIs, no
 Premium accounts, and no ads.
