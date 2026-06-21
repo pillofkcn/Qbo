@@ -21,6 +21,10 @@ services:
   # client credentials can't reach playlist/album/artist endpoints — LavaSrc uses this
   # for an anonymous token (like the web player). Pairs with
   # lavasrc.spotify.customTokenEndpoint: "http://localhost:8080/api/token".
+  #
+  # NOTE: the DEFAULT deployment runs this NATIVELY as a Windows service (no Docker) via
+  # scripts/get-tokener.ps1 + scripts/install-services.ps1. This Docker service is kept
+  # only as a fallback if the native Chrome-based tokener misbehaves.
   spotify-tokener:
     image: ghcr.io/topi314/spotify-tokener:master
     container_name: spotify-tokener

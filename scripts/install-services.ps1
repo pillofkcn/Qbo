@@ -1,11 +1,13 @@
 <#
 .SYNOPSIS
-  Register Lavalink + the Discord bot as auto-starting Windows services via NSSM.
+  Register Lavalink + the Discord bot + spotify-tokener as auto-starting Windows
+  services via NSSM (no Docker; everything native for lowest audio latency).
 
 .DESCRIPTION
-  Creates two services that start at boot (before login), restart on crash, and
+  Creates three services that start at boot (before login), restart on crash, and
   run headless on the home server:
-    - "Lavalink"          -> java -Xmx1g -jar Lavalink.jar   (in lavalink/)
+    - "SpotifyTokener"    -> bin\spotify-tokener.exe          (anon token on 127.0.0.1:8080)
+    - "Lavalink"          -> java -Xmx1g -jar Lavalink.jar    (in lavalink/)
     - "DiscordMusicBot"   -> node --import tsx src/index.ts   (in repo root)
   Environment variables are injected from the project .env file.
 
@@ -17,6 +19,7 @@
   - NSSM          : winget install NSSM.NSSM   (or choco install nssm)
   - npm install   (run once in the repo so node_modules + tsx exist)
   - lavalink/Lavalink.jar present (run scripts/get-lavalink.ps1)
+  - bin/spotify-tokener.exe present + Chrome installed (run scripts/get-tokener.ps1)
   - lavalink/application.yml and .env filled in
 #>
 $ErrorActionPreference = "Stop"
@@ -50,6 +53,14 @@ if (-not (Test-Path (Join-Path $repo ".env"))) {
 }
 if (-not (Test-Path (Join-Path $repo "node_modules"))) {
     throw "node_modules missing. Run 'npm install' in the repo first."
+}
+$tokener = Join-Path $repo "bin\spotify-tokener.exe"
+$chrome = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+if (-not (Test-Path $tokener)) {
+    throw "bin\spotify-tokener.exe missing. Run: ./scripts/get-tokener.ps1"
+}
+if (-not (Test-Path $chrome)) {
+    throw "Chrome missing at $chrome (needed by spotify-tokener). Install: winget install Google.Chrome"
 }
 
 # ── parse .env into NAME=VALUE entries ───────────────────────────────────
@@ -86,7 +97,11 @@ function Install-Service($name, $app, $params, $workdir, $envExtra, $depends) {
     if ($depends) { & nssm set $name DependOnService $depends }
 }
 
-Write-Host "`nInstalling 'Lavalink' service..." -ForegroundColor Cyan
+Write-Host "`nInstalling 'SpotifyTokener' service..." -ForegroundColor Cyan
+$tokenerEnv = @("SPOTIFY_TOKENER_ADDR=127.0.0.1:8080", "SPOTIFY_TOKENER_CHROME_PATH=$chrome")
+Install-Service "SpotifyTokener" $tokener "" $repo $tokenerEnv $null
+
+Write-Host "Installing 'Lavalink' service..." -ForegroundColor Cyan
 Install-Service "Lavalink" $java "-Xmx1g -jar Lavalink.jar" $lavalinkDir $envEntries $null
 
 Write-Host "Installing 'DiscordMusicBot' service..." -ForegroundColor Cyan
@@ -95,11 +110,13 @@ $botEnv = $envEntries + "NODE_ENV=production"
 Install-Service "DiscordMusicBot" $node $botParams $repo $botEnv "Lavalink"
 
 Write-Host "`nStarting services..." -ForegroundColor Cyan
+& nssm start SpotifyTokener
 & nssm start Lavalink
 Start-Sleep -Seconds 8   # give Lavalink a head start to load plugins
 & nssm start DiscordMusicBot
 
 Write-Host "`nDone. Manage with:" -ForegroundColor Green
-Write-Host "  nssm restart Lavalink ; nssm restart DiscordMusicBot"
-Write-Host "  nssm status  Lavalink ; nssm status  DiscordMusicBot"
+Write-Host "  nssm restart SpotifyTokener ; nssm restart Lavalink ; nssm restart DiscordMusicBot"
+Write-Host "  nssm status  SpotifyTokener ; nssm status  Lavalink ; nssm status  DiscordMusicBot"
 Write-Host "  Logs: $lavalinkDir\logs  and  $repo\logs"
+Write-Host "  Tokener check: Invoke-RestMethod http://localhost:8080/api/token"

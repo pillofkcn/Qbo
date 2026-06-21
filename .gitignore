@@ -8,6 +8,8 @@ node_modules/
 
 # Build output
 dist/
+# Native spotify-tokener binary (built locally via scripts/get-tokener.ps1)
+bin/
 
 # Logs
 *.log

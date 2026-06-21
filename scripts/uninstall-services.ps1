@@ -10,7 +10,7 @@ $admin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
     ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $admin) { throw "Please run this script in an elevated (Administrator) PowerShell." }
 
-foreach ($name in @("DiscordMusicBot", "Lavalink")) {
+foreach ($name in @("DiscordMusicBot", "Lavalink", "SpotifyTokener")) {
     if (Get-Service $name -ErrorAction SilentlyContinue) {
         Write-Host "Removing service '$name'..." -ForegroundColor Yellow
         & nssm stop $name | Out-Null
