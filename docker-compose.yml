@@ -22,7 +22,7 @@ services:
   # for an anonymous token (like the web player). Pairs with
   # lavasrc.spotify.customTokenEndpoint: "http://localhost:8080/api/token".
   spotify-tokener:
-    image: ghcr.io/topi314/spotify-tokener:latest
+    image: ghcr.io/topi314/spotify-tokener:master
     container_name: spotify-tokener
     restart: unless-stopped
     ports:
