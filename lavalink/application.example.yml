@@ -102,8 +102,14 @@ plugins:
       youtube: false
       lrcLib: true               # free, no-auth lyrics for /lyrics
     spotify:
-      clientId: "${SPOTIFY_CLIENT_ID}"
-      clientSecret: "${SPOTIFY_CLIENT_SECRET}"
+      # clientId/clientSecret are intentionally LEFT UNSET. With valid client credentials,
+      # LavaSrc 4.8.3 resolves playlists via the client-credentials token (getAccessToken(false)),
+      # which Spotify 401s for this Development-mode app. Leaving creds unset makes LavaSrc use
+      # the ANONYMOUS token (customTokenEndpoint / spotify-tokener) for ALL Spotify resolution —
+      # tracks, albums, playlists, artists — which reads public content like the web player.
+      # (spsearch is unused; we search via ytmsearch.) To revert: uncomment the two lines below.
+      # clientId: "${SPOTIFY_CLIENT_ID}"
+      # clientSecret: "${SPOTIFY_CLIENT_SECRET}"
       countryCode: "SK"
       playlistLoadLimit: 6
       albumLoadLimit: 6
