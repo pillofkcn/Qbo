@@ -114,6 +114,10 @@ plugins:
       playlistLoadLimit: 6
       albumLoadLimit: 6
       resolveArtistsInSearch: true
+      # Resolve playlists/albums/artists via Spotify's PARTNER API (api-partner.spotify.com)
+      # first. The anonymous token below belongs to the partner API; the public api.spotify.com/v1
+      # endpoint throttles anonymous requests (429). This is what makes playlist loading work.
+      preferPartnerApi: true
       # Anonymous token endpoint (spotify-tokener). REQUIRED here: the Spotify app is in
       # Development mode, so client credentials can't load playlists/albums/artists —
       # this routes those through an anonymous (web-player-style) token. Run the
