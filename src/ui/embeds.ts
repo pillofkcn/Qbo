@@ -8,6 +8,7 @@ export type AnyTrack = Track | UnresolvedTrack;
 export const ACCENT = 0x5865f2;
 export const ERROR_COLOR = 0xed4245;
 export const OK_COLOR = 0x57f287;
+export const WARN_COLOR = 0xfee75c;
 
 /** Render a requester (we store the discord.js User) as a mention. */
 export function requesterMention(requester: unknown): string {
@@ -43,6 +44,24 @@ export const okEmbed = (msg: string): EmbedBuilder =>
 
 export const infoEmbed = (msg: string): EmbedBuilder =>
   new EmbedBuilder().setColor(ACCENT).setDescription(msg);
+
+/** Notice that a failed track continues from another source (Layer-3 fallback). */
+export function fallbackEmbed(
+  failed: { title: string; sourceName?: string },
+  replacement: AnyTrack,
+  resumedAtMs: number,
+): EmbedBuilder {
+  const from = sourceLabel(failed.sourceName);
+  const via = sourceLabel(replacement.info.sourceName);
+  const title = truncate(replacement.info.title, 80);
+  const link = replacement.info.uri ? `[${title}](${replacement.info.uri})` : `**${title}**`;
+  const at = resumedAtMs > 0 ? ` from \`${formatDuration(resumedAtMs)}\`` : "";
+  return new EmbedBuilder()
+    .setColor(WARN_COLOR)
+    .setDescription(
+      `⚠️ **${truncate(failed.title, 80)}** stopped on ${from.name} — playing ${link} via ${via.emoji} ${via.name}${at} instead.`,
+    );
+}
 
 /** The now-playing embed (progress bar, source, requester, loop & volume). */
 export function nowPlayingEmbed(player: Player): EmbedBuilder {

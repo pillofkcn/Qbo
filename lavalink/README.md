@@ -68,9 +68,27 @@ set `YT_CIPHER_PASSWORD` in `.env`, then uncomment the `youtube.remoteCipher` bl
 
 ## 6. Updating plugins
 
-When YouTube/Spotify change and playback breaks, bump the plugin version in
-`application.yml` (a one-line edit) and restart Lavalink:
+When YouTube/Spotify change and playback breaks (typical symptoms: tracks stop a few
+seconds in, or fail to load at all), bump the plugin version in `application.yml`
+(a one-line edit) and restart Lavalink:
 
 ```powershell
 nssm restart Lavalink
 ```
+
+Lavalink downloads the new jar on start and deletes the old version. The bot logs
+the versions the server actually runs (`lavalink node connected` → `plugins`).
+
+If a fix is merged upstream but not released yet, pin a **snapshot** build: the
+version is the full commit hash from the plugin's `main` branch, served from the
+snapshot repository:
+
+```yaml
+- dependency: "dev.lavalink.youtube:youtube-plugin:<full 40-character commit hash>"
+  repository: "https://maven.lavalink.dev/snapshots"
+  snapshot: true
+```
+
+`application.yml` is not tracked by git. `scripts/install-services.ps1` copies
+`application.example.yml` over it on every run (keeping a `.bak-*` copy), so after
+`git pull` just re-run that script — or copy plugin changes by hand.

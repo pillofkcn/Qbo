@@ -6,7 +6,10 @@
 #  ⚠ Plugin versions move fast. Verify the latest at build time:
 #     youtube-source : https://github.com/lavalink-devs/youtube-source/releases
 #     LavaSrc        : https://github.com/topi314/LavaSrc/releases
-#  Verified known-good baseline: June 2026.
+#  Verified known-good baseline: October 2026.
+#
+#  application.yml is not tracked by git: scripts/install-services.ps1 copies this
+#  file over it on every run (keeping a .bak-* copy) — re-run it after `git pull`.
 # ════════════════════════════════════════════════════════════════════════
 
 server:
@@ -17,9 +20,12 @@ server:
 
 lavalink:
   plugins:
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.1"
-      repository: "https://maven.lavalink.dev/releases"
-      snapshot: false
+    # youtube-source SNAPSHOT from main (commit 2be8e54, 2026-09-17). YouTube now serves many videos only
+    # as the muxed itag 18 format: 1.18.1 reads it as a live stream and stops a few seconds in, 1.18.2
+    # cuts off the last seconds. Switch back to a release (>= 1.18.3) once one is published.
+    - dependency: "dev.lavalink.youtube:youtube-plugin:2be8e542d3f6f178e048dca565892684c2e40177"
+      repository: "https://maven.lavalink.dev/snapshots"
+      snapshot: true
     - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.3"
       repository: "https://maven.lavalink.dev/releases"
       snapshot: false
@@ -56,15 +62,16 @@ plugins:
     allowSearch: true
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
-    # Clients are tried in order (Layer-1 internal fallback). Verified valid for
-    # youtube-source 1.18.x. Names change between versions — if Lavalink logs
+    # Clients are tried in order (Layer-1 internal fallback); order follows the upstream README
+    # (October 2026). ANDROID_VR needs no player-script cipher, so tracks start sooner and survive
+    # cipher breakage. Names change between versions — if Lavalink logs
     # "Failed to resolve <CLIENT> into a Client", fix this list against the README:
     # https://github.com/lavalink-devs/youtube-source#available-clients
     clients:
-      - MUSIC
+      - MUSIC            # search only (ytmsearch), never used for playback
+      - ANDROID_VR
       - WEB
       - WEBEMBEDDED
-      - ANDROID_VR
       - TVHTML5_SIMPLY
     # ── Optional reliability upgrades (leave commented for first boot) ──────
     # OAuth: on first run the log prints a device code; authorise at
@@ -132,6 +139,9 @@ logging:
   level:
     root: INFO
     lavalink: INFO
+    # Set to DEBUG temporarily to see which YouTube client/format each track uses
+    # ("Starting track with URL from client ...", "missing format URL ... SABR response?").
+    dev.lavalink.youtube: INFO
   file:
     path: ./logs/
   logback:

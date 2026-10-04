@@ -5,14 +5,26 @@ import {
   SlashCommandBuilder,
   StringSelectMenuBuilder,
 } from "discord.js";
-import type { SearchPlatform } from "lavalink-client";
+import type { Player, SearchPlatform } from "lavalink-client";
 import { getGuildSettings } from "../db/settings.js";
+import { isRecovering } from "../lavalink/fallback.js";
 import { formatDuration, truncate } from "../lib/format.js";
 import { requireUserInVoice } from "../lib/guards.js";
 import { searchSourceFor } from "../lib/resolve.js";
 import { logger } from "../logger.js";
 import { addedPlaylistEmbed, addedTrackEmbed, errorEmbed, infoEmbed } from "../ui/embeds.js";
 import type { Command } from "../types/index.js";
+
+/**
+ * Nothing loaded and no fallback lookup running. play() sets `queue.current`
+ * synchronously, whereas `player.playing` only flips on TrackStart — checking
+ * it would restart a track that is still loading.
+ */
+const isIdle = (player: Player): boolean => !player.queue.current && !isRecovering(player);
+
+async function startIfIdle(player: Player): Promise<void> {
+  if (isIdle(player)) await player.play({ paused: false });
+}
 
 const command: Command = {
   data: new SlashCommandBuilder()
@@ -72,10 +84,6 @@ const command: Command = {
       return;
     }
 
-    const startIfIdle = async () => {
-      if (!player.playing && !player.paused) await player.play();
-    };
-
     // Playlist / album -> bulk add.
     if (result.loadType === "playlist") {
       await player.queue.add(result.tracks);
@@ -86,19 +94,19 @@ const command: Command = {
       await interaction.editReply({
         embeds: [addedPlaylistEmbed(name, result.tracks, interaction.user)],
       });
-      await startIfIdle();
+      await startIfIdle(player);
       return;
     }
 
     // Direct track / single URL.
     if (result.loadType === "track") {
       const track = result.tracks[0];
-      const wasIdle = !player.playing && !player.queue.current;
+      const wasIdle = isIdle(player);
       await player.queue.add(track);
       await interaction.editReply({
         embeds: [addedTrackEmbed(track, wasIdle ? 0 : player.queue.tracks.length)],
       });
-      await startIfIdle();
+      await startIfIdle(player);
       return;
     }
 
@@ -126,30 +134,56 @@ const command: Command = {
     const collector = message.createMessageComponentCollector({
       componentType: ComponentType.StringSelect,
       time: 30_000,
-      max: 1,
     });
+    let picked = false;
 
     collector.on("collect", async (i) => {
+      // Other users get a private reply; their clicks don't use up the menu.
       if (i.user.id !== interaction.user.id) {
-        await i.reply({ content: "This selection isn't for you.", flags: MessageFlags.Ephemeral });
+        await i
+          .reply({ content: "This selection isn't for you.", flags: MessageFlags.Ephemeral })
+          .catch(() => {});
         return;
       }
-      const track = top[Number(i.values[0])];
-      const wasIdle = !player.playing && !player.queue.current;
-      await player.queue.add(track);
-      await i.update({
-        embeds: [addedTrackEmbed(track, wasIdle ? 0 : player.queue.tracks.length)],
-        components: [],
-      });
-      await startIfIdle();
-    });
+      if (picked) {
+        await i.deferUpdate().catch(() => {});
+        return;
+      }
+      picked = true;
+      collector.stop("picked");
 
-    collector.on("end", async (collected) => {
-      if (collected.size === 0) {
-        await interaction
-          .editReply({ embeds: [infoEmbed("⌛ Selection timed out.")], components: [] })
+      const track = top[Number(i.values[0])];
+      // The player may be gone (/disconnect, auto-leave) while the menu was open.
+      const live = client.lavalink.getPlayer(guildId);
+      if (!track || !live) {
+        await i
+          .update({ embeds: [errorEmbed("Playback was stopped while you were choosing — run /play again.")], components: [] })
+          .catch(() => {});
+        return;
+      }
+      const wasIdle = isIdle(live);
+      await live.queue.add(track);
+      await i
+        .update({
+          embeds: [addedTrackEmbed(track, wasIdle ? 0 : live.queue.tracks.length)],
+          components: [],
+        })
+        .catch(() => {});
+      try {
+        await startIfIdle(live);
+      } catch (err) {
+        logger.error({ err, guildId }, "failed to start the selected track");
+        await i
+          .followUp({ embeds: [errorEmbed("Couldn't start playback. Try again.")], flags: MessageFlags.Ephemeral })
           .catch(() => {});
       }
+    });
+
+    collector.on("end", async () => {
+      if (picked) return;
+      await interaction
+        .editReply({ embeds: [infoEmbed("⌛ Selection timed out.")], components: [] })
+        .catch(() => {});
     });
   },
 };

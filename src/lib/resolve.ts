@@ -49,20 +49,16 @@ export function sourceLabel(sourceName?: string): { emoji: string; name: string 
 }
 
 /**
- * Layer-3 fallback (spec §3): pick a DIFFERENT search prefix than the one that
- * just failed, so a re-resolve doesn't hit the same broken path. YouTube
- * failures fall back to SoundCloud (no-auth, survives a full YT outage);
- * everything else falls back to YouTube Music.
+ * Layer-3 fallback (spec §3): search sources to try, in order, after a track
+ * fails. A YouTube failure first tries YouTube Music — another upload of the
+ * same song usually plays when one video is blocked — then SoundCloud (no-auth,
+ * survives a full YouTube outage). A SoundCloud failure goes back to YouTube.
  */
-export function altSearchSource(failedSourceName?: string): SearchPlatform {
+export function fallbackSearchSources(failedSourceName?: string): SearchPlatform[] {
   switch ((failedSourceName ?? "").toLowerCase()) {
-    case "youtube":
-    case "youtubemusic":
-    case "spotify": // mirrored via YT by default — try SoundCloud instead
-      return "scsearch";
     case "soundcloud":
-      return "ytmsearch";
-    default:
-      return "scsearch";
+      return ["ytmsearch", "ytsearch"];
+    default: // youtube, youtubemusic, spotify (mirrored via YouTube), others
+      return ["ytmsearch", "scsearch"];
   }
 }

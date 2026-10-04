@@ -28,7 +28,7 @@ The architecture and design rationale are summarised in [Architecture](#architec
 - Paginated queue showing requester, durations, and total time remaining
 - Full navigation: skip, previous, seek, jump, pause/resume, shuffle, loop, volume, remove, clear
 - Interactive controls under the now-playing message (previous, pause, skip, stop, shuffle, loop)
-- Automatic source fallback — if YouTube is blocked or rate-limited, tracks play from SoundCloud with no user action
+- Automatic source fallback — if a YouTube stream fails or breaks mid-song, the same song is found on YouTube Music or SoundCloud and resumes where it stopped, with no user action
 - Autoplay / radio — queues related tracks automatically when the queue empties
 - Lyrics for the current track via LavaLyrics and LRCLIB
 - Per-server settings (default volume, autoplay) persisted in a local SQLite database
@@ -161,15 +161,21 @@ npm run dev
 > Spotify playlists in dev also need the token service: run `bin\spotify-tokener.exe` (after
 > `./scripts/get-tokener.ps1`), or simply install the services below.
 
-**Production (Windows services via NSSM)** — run from an elevated PowerShell:
+**Production (Windows services via NSSM)** — one command installs or updates everything (it
+reopens itself as Administrator if needed):
 
 ```powershell
-./scripts/install-services.ps1
+git pull
+powershell -ExecutionPolicy Bypass -File .\scripts\install-services.ps1
 ```
 
-This registers three services — `SpotifyTokener`, `Lavalink`, and `DiscordMusicBot` — that start
-automatically on boot (before login), restart on failure, and run headless. No Docker, no open
-terminals. Manage them with:
+It installs missing prerequisites (JDK 21, Node.js, NSSM), runs `npm ci`, downloads
+`Lavalink.jar` and builds `spotify-tokener` if they're missing, syncs `lavalink/application.yml`
+from `application.example.yml` (the old copy is kept as a `.bak-*` file; pass
+`-KeepLavalinkConfig` to skip), then registers three services — `SpotifyTokener`, `Lavalink`, and
+`DiscordMusicBot` (shown as "Qbo - …" in `services.msc`) — that start automatically on boot
+(before login), restart on failure, and run headless. Finally it checks that Lavalink answers and
+prints the plugin versions it loaded. Re-run it after every `git pull`. Manage the services with:
 
 ```powershell
 nssm restart SpotifyTokener ; nssm restart Lavalink ; nssm restart DiscordMusicBot
@@ -211,11 +217,17 @@ Resilience is layered so a single broken source never stops playback:
 1. youtube-source clients — the plugin cycles through multiple YouTube clients in order.
 2. LavaSrc provider chain — Spotify and mirrored tracks try each source in turn, ending with
    SoundCloud (`scsearch:`, no authentication), which survives a complete YouTube outage.
-3. Bot-level retry — on `trackError` or `trackStuck` the bot re-resolves the same track via a
-   different source (up to two attempts) and logs every fallback hop for diagnostics.
+3. Bot-level retry — when a track errors, stalls, or ends long before its duration (a stream
+   that silently broke), the bot looks for the same song on YouTube Music, then SoundCloud. It
+   only accepts a close match (title, artist, length — no covers, remixes or previews), resumes
+   near where playback dropped out, and keeps the rest of the queue in order. At most two
+   replacements per track; otherwise it posts "Couldn't play …" and moves on. Every hop is logged.
 
 To verify: set `plugins.youtube.enabled: false` in `lavalink/application.yml`, restart
 Lavalink, and confirm playback continues from SoundCloud (the source switch appears in the log).
+Note: SoundCloud playback is broken on Lavalink 4.2.2 at the time of writing (HTTP 404 on HLS
+streams, [Lavalink#1221](https://github.com/lavalink-devs/Lavalink/issues/1221)), so this test can
+end with "Couldn't play …" — the bot skips the track rather than playing a different song.
 
 ## Troubleshooting
 
@@ -223,7 +235,8 @@ Lavalink, and confirm playback continues from SoundCloud (the source switch appe
 |---|---|
 | Slash commands don't appear | Run `npm run deploy`; set `DEV_GUILD_ID` for instant registration |
 | "I'm already in another voice channel" | The bot is playing elsewhere — use `/disconnect` or join it |
-| YouTube fails (403/429) | Enable OAuth or yt-cipher ([`lavalink/README.md`](lavalink/README.md)); SoundCloud fallback works meanwhile |
+| YouTube fails (403/429) | Enable OAuth or yt-cipher ([`lavalink/README.md`](lavalink/README.md)); the bot-level fallback tries other sources meanwhile |
+| Tracks stop a few seconds in, now-playing message vanishes | Outdated `youtube-plugin` — update it in `lavalink/application.yml` ([`lavalink/README.md`](lavalink/README.md) §6) |
 | Spotify finds no audio (esp. playlists) | Check the `SpotifyTokener` service: `Invoke-RestMethod http://localhost:8080/api/token` should return a token |
 | `/lyrics` returns nothing | Ensure `lavalyrics-plugin` is installed in `application.yml` |
 | Lavalink crashes on startup | Check indentation — `plugins:` is a root key, not under `lavalink:` |
@@ -237,10 +250,10 @@ src/
   index.ts            Client + Lavalink bootstrap, login
   config.ts           Typed .env loading and validation
   deploy-commands.ts  Slash-command registration
-  lavalink/           Manager, events (Layer-3 fallback), autoplay
+  lavalink/           Manager, events, Layer-3 fallback, autoplay
   events/             ready, interactionCreate (router), voiceStateUpdate
   commands/           19 slash commands
   ui/                 Embeds and now-playing controls
-  lib/                Formatting, pagination, resolution, guards, loaders
+  lib/                Formatting, pagination, resolution, track matching, guards, loaders
   db/                 Per-server settings (better-sqlite3)
 ```

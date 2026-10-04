@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from "discord.js";
+import { cancelFallback } from "../lavalink/fallback.js";
 import { replyError, requireActiveSameVC } from "../lib/guards.js";
 import { okEmbed } from "../ui/embeds.js";
 import type { Command } from "../types/index.js";
@@ -27,6 +28,7 @@ const command: Command = {
       await replyError(interaction, `Enter a position between 1 and ${len}.`);
       return;
     }
+    cancelFallback(player);
     await player.skip(pos, false);
     await interaction.reply({
       embeds: [okEmbed(`⏭️ Jumped to #${pos} (tracks in between were removed from the queue).`)],

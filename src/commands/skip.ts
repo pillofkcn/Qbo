@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from "discord.js";
+import { cancelFallback } from "../lavalink/fallback.js";
 import { replyError, requireActiveSameVC } from "../lib/guards.js";
 import { okEmbed } from "../ui/embeds.js";
 import type { Command } from "../types/index.js";
@@ -20,6 +21,7 @@ const command: Command = {
     const requested = interaction.options.getInteger("count") ?? 1;
     const count = Math.min(requested, player.queue.tracks.length + 1);
     const hadMore = player.queue.tracks.length > 0;
+    cancelFallback(player);
     await player.skip(count, false).catch(() => {});
     await interaction.reply({
       embeds: [

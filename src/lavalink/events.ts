@@ -1,14 +1,26 @@
 import type { Client } from "discord.js";
-import type { LavalinkManager, Player, Track } from "lavalink-client";
+import {
+  DestroyReasons,
+  type LavalinkManager,
+  type Player,
+  type TrackEndEvent,
+  type TrackExceptionEvent,
+  type TrackStuckEvent,
+} from "lavalink-client";
 import { getGuildSettings } from "../db/settings.js";
-import { altSearchSource } from "../lib/resolve.js";
 import { logger } from "../logger.js";
-import { clearNowPlaying, startNowPlayingTicker, updateNowPlaying } from "../ui/controls.js";
+import { clearNowPlaying, notify, startNowPlayingTicker, updateNowPlaying } from "../ui/controls.js";
 import { errorEmbed } from "../ui/embeds.js";
+import { handleTrackFinished, noteTrackStart, playedMs, recordFailure } from "./fallback.js";
 
-const MAX_RETRIES = 2;
-
-const retryKey = (id: string | undefined): string => `retry:${id ?? "unknown"}`;
+/** Player destroys the users should hear about (the bot leaves the channel). */
+const DESTROY_NOTICES: Partial<Record<string, string>> = {
+  [DestroyReasons.TrackErrorMaxTracksErroredPerTime]:
+    "Stopped — too many tracks failed in a row. YouTube may be blocked; check the Lavalink log.",
+  [DestroyReasons.TrackStuckMaxTracksErroredPerTime]:
+    "Stopped — too many tracks got stuck in a row. Check the Lavalink log.",
+  [DestroyReasons.LavalinkNoVoice]: "Lost the voice connection. Use /play to start again.",
+};
 
 /** Wire up all Lavalink player + node events (spec §9 src/lavalink/events.ts). */
 export function registerLavalinkEvents(client: Client): void {
@@ -20,54 +32,115 @@ export function registerLavalinkEvents(client: Client): void {
     logger.info({ guildId: player.guildId, autoplay: settings.autoplay }, "player created");
   });
 
-  manager.on("trackStart", async (player, track) => {
-    const t = track as Track;
+  manager.on("trackStart", async (player, _track, payload) => {
+    noteTrackStart(player, payload);
+    const info = payload.track?.info;
     logger.info(
-      { guildId: player.guildId, title: t?.info?.title, source: t?.info?.sourceName },
+      { guildId: player.guildId, title: info?.title, source: info?.sourceName, identifier: info?.identifier },
       "track start",
     );
-    player.setData(retryKey(t?.info?.identifier), 0);
     await updateNowPlaying(client, player);
     startNowPlayingTicker(client, player);
   });
 
-  manager.on("trackEnd", (player, _track, payload) => {
-    logger.debug(
-      { guildId: player.guildId, reason: (payload as { reason?: string })?.reason },
-      "track end",
-    );
+  manager.on("trackEnd", async (player, track, payload) => {
+    logEnd("track end", player, payload);
+    handleTrackFinished(client, player, track, payload);
   });
 
-  manager.on("queueEnd", async (player) => {
-    logger.info({ guildId: player.guildId }, "queue ended");
-    await clearNowPlaying(client, player);
+  manager.on("queueEnd", async (player, track, payload) => {
+    logEnd("queue ended", player, payload);
+    // While a replacement is being looked up, keep the now-playing panel.
+    if (!handleTrackFinished(client, player, track, payload)) await clearNowPlaying(client, player);
   });
 
   manager.on("playerDestroy", async (player, reason) => {
     logger.info({ guildId: player.guildId, reason }, "player destroyed");
+    const notice = reason ? DESTROY_NOTICES[reason] : undefined;
+    if (notice) await notify(client, player, errorEmbed(notice));
     await clearNowPlaying(client, player);
   });
 
-  manager.on("playerDisconnect", async (player) => {
+  manager.on("playerDisconnect", async (player, voiceChannelId) => {
+    logger.info({ guildId: player.guildId, voiceChannelId }, "player disconnected from voice");
     await clearNowPlaying(client, player);
   });
 
-  // ── Layer-3 fallback (spec §3): retry the failed track via another source ──
-  manager.on("trackError", (player, track, payload) => {
-    const p = payload as { exception?: { message?: string }; error?: string };
-    const reason = p?.exception?.message ?? p?.error ?? "unknown error";
-    void handlePlaybackFailure(client, player, track as Track, "trackError", reason);
+  manager.on("playerSocketClosed", (player, payload) => {
+    const level = payload.code >= 4000 ? "warn" : "info";
+    logger[level](
+      {
+        guildId: player.guildId,
+        code: payload.code,
+        reason: payload.reason,
+        byRemote: payload.byRemote,
+        voiceChannelId: player.voiceChannelId,
+      },
+      "discord voice websocket closed",
+    );
   });
 
-  manager.on("trackStuck", (player, track, payload) => {
-    const p = payload as { thresholdMs?: number };
-    void handlePlaybackFailure(client, player, track as Track, "trackStuck", `stuck >${p?.thresholdMs}ms`);
+  // ── Layer-3 fallback (spec §3): record failures here, recover on the end event ──
+  manager.on("trackError", async (player, track, payload) => {
+    // lavalink-client also emits trackError with a plain Error when it can't resolve a track itself.
+    if ((payload as { type?: unknown } | undefined)?.type !== "TrackExceptionEvent") {
+      logger.error({ guildId: player.guildId, title: track?.info?.title, err: payload }, "track could not be resolved");
+      return;
+    }
+    const info = payload.track?.info;
+    const ex = payload.exception;
+    logger.error(
+      {
+        guildId: player.guildId,
+        title: info?.title,
+        source: info?.sourceName,
+        identifier: info?.identifier,
+        positionMs: Math.round(playedMs(player, payload.track)),
+        severity: ex?.severity,
+        message: ex?.message ?? payload.error,
+        cause: ex?.cause,
+      },
+      "track exception",
+    );
+    recordFailure(player, "error", payload, ex?.message ?? payload.error ?? "track exception");
+  });
+
+  manager.on("trackStuck", async (player, _track, payload) => {
+    const info = payload.track?.info;
+    logger.warn(
+      {
+        guildId: player.guildId,
+        title: info?.title,
+        source: info?.sourceName,
+        thresholdMs: payload.thresholdMs,
+        lastPositionMs: player.lastPosition,
+      },
+      "track stuck",
+    );
+    recordFailure(player, "stuck", payload, `stuck > ${payload.thresholdMs} ms`);
+  });
+
+  // Only emitted when advancedOptions.enableDebugEvents is on (LOG_LEVEL=debug).
+  manager.on("debug", (key, data) => {
+    logger.debug({ key, state: data.state, layer: data.functionLayer, err: data.error }, data.message);
   });
 
   // ── Node lifecycle resilience (spec §12) — events are on nodeManager ──────
-  manager.nodeManager.on("connect", (node) =>
-    logger.info({ node: node.id }, "lavalink node connected"),
-  );
+  manager.nodeManager.on("connect", (node) => {
+    // node.info (/v4/info) is fetched before "connect" fires — shows what the server really runs.
+    const info = node.info;
+    logger.info(
+      {
+        node: node.id,
+        lavalink: info?.version?.semver,
+        lavaplayer: info?.lavaplayer,
+        jvm: info?.jvm,
+        plugins: info?.plugins?.map((p) => `${p.name}@${p.version}`),
+        sources: info?.sourceManagers,
+      },
+      "lavalink node connected",
+    );
+  });
   manager.nodeManager.on("reconnecting", (node) =>
     logger.warn({ node: node.id }, "lavalink node reconnecting"),
   );
@@ -79,98 +152,21 @@ export function registerLavalinkEvents(client: Client): void {
   );
 }
 
-/**
- * Re-resolve the failed track by text query, forcing a DIFFERENT source prefix
- * than the one that failed (e.g. YouTube -> SoundCloud). Bounded to MAX_RETRIES.
- * On success: play the recovered track immediately via play({ clientTrack }).
- * On exhaustion: notify the channel and let the queue continue.
- */
-async function handlePlaybackFailure(
-  client: Client,
-  player: Player,
-  track: Track | null,
-  kind: "trackError" | "trackStuck",
-  reason: string,
-): Promise<void> {
-  const info = track?.info;
-  const attempts = (player.getData<number>(retryKey(info?.identifier)) ?? 0) + 1;
-  player.setData(retryKey(info?.identifier), attempts);
-
-  const fallbackSource = altSearchSource(info?.sourceName);
-
-  // Structured fallback-hop log — this is how the owner diagnoses breakage.
-  logger.warn(
-    {
-      guildId: player.guildId,
-      event: kind,
-      failedSource: info?.sourceName,
-      title: info?.title,
-      reason,
-      attempt: attempts,
-      maxRetries: MAX_RETRIES,
-      fallbackSource,
-    },
-    "playback failure — attempting source fallback",
-  );
-
-  const query = `${info?.author ?? ""} ${info?.title ?? ""}`.trim();
-
-  if (attempts > MAX_RETRIES || query === "") {
-    logger.error(
-      { guildId: player.guildId, title: info?.title },
-      "fallback exhausted — skipping track",
-    );
-    await notify(client, player, `Couldn't play **${info?.title ?? "this track"}**, skipping.`);
-    await advanceIfIdle(player);
-    return;
-  }
-
-  const requester = (track as { requester?: unknown } | null)?.requester;
-  const res = await player.search({ query, source: fallbackSource }, requester).catch(() => null);
-
-  if (!res?.tracks?.length) {
-    logger.error(
-      { guildId: player.guildId, fallbackSource },
-      "fallback re-resolve found nothing — skipping",
-    );
-    await notify(client, player, `Fallback source found no match for **${info?.title ?? "this track"}**, skipping.`);
-    await advanceIfIdle(player);
-    return;
-  }
-
-  const replacement = res.tracks[0];
-  // Carry the attempt counter to the replacement so a second failure still counts.
-  player.setData(retryKey(replacement.info.identifier), attempts);
-
+/** One info line per ended track — the position vs. duration shows premature ends at a glance. */
+function logEnd(label: string, player: Player, payload: TrackEndEvent | TrackStuckEvent | TrackExceptionEvent): void {
+  const info = payload.track?.info;
   logger.info(
     {
       guildId: player.guildId,
-      fallbackSource,
-      recoveredFrom: info?.sourceName,
-      recoveredVia: replacement.info.sourceName,
-      title: replacement.info.title,
+      event: payload.type,
+      reason: payload.type === "TrackEndEvent" ? payload.reason : undefined,
+      title: info?.title,
+      source: info?.sourceName,
+      identifier: info?.identifier,
+      positionMs: Math.round(playedMs(player, payload.track)),
+      durationMs: info?.length,
+      queued: player.queue.tracks.length,
     },
-    "fallback succeeded — playing recovered track",
+    label,
   );
-
-  await player.play({ clientTrack: replacement }).catch(async (err: unknown) => {
-    logger.error({ err, guildId: player.guildId }, "failed to start recovered track");
-    await advanceIfIdle(player);
-  });
-}
-
-/** Start the next queued track only if the player is currently idle. */
-async function advanceIfIdle(player: Player): Promise<void> {
-  if (!player.playing && player.queue.tracks.length > 0) {
-    await player.play().catch(() => {});
-  }
-}
-
-async function notify(client: Client, player: Player, message: string): Promise<void> {
-  const channelId = player.textChannelId;
-  if (!channelId) return;
-  const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (channel?.isTextBased() && !channel.isDMBased()) {
-    await channel.send({ embeds: [errorEmbed(message)] }).catch(() => {});
-  }
 }

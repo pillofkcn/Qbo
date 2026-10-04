@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from "discord.js";
+import { cancelFallback } from "../lavalink/fallback.js";
 import { replyError, requireActiveSameVC } from "../lib/guards.js";
 import { okEmbed } from "../ui/embeds.js";
 import type { Command } from "../types/index.js";
@@ -15,7 +16,8 @@ const command: Command = {
       await replyError(interaction, "No previous track in history.");
       return;
     }
-    await player.play({ clientTrack: previous });
+    cancelFallback(player);
+    await player.play({ clientTrack: previous, position: 0 });
     await interaction.reply({ embeds: [okEmbed("⏮️ Playing the previous track.")] });
   },
 };

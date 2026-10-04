@@ -5,10 +5,12 @@ import {
   MessageFlags,
   type ButtonInteraction,
   type Client,
+  type EmbedBuilder,
   type GuildMember,
   type GuildTextBasedChannel,
 } from "discord.js";
 import type { Player } from "lavalink-client";
+import { cancelFallback } from "../lavalink/fallback.js";
 import { logger } from "../logger.js";
 import { errorEmbed, nowPlayingEmbed } from "./embeds.js";
 
@@ -51,6 +53,14 @@ async function fetchTextChannel(
     return channel as GuildTextBasedChannel;
   }
   return null;
+}
+
+/** Post a standalone notice (fallback hops, skips, errors) in the player's text channel. */
+export async function notify(client: Client, player: Player, embed: EmbedBuilder): Promise<void> {
+  const channelId = player.textChannelId;
+  if (!channelId) return;
+  const channel = await fetchTextChannel(client, channelId);
+  if (channel) await channel.send({ embeds: [embed] }).catch(() => {});
 }
 
 /**
@@ -147,6 +157,7 @@ export async function handleNowPlayingButton(
         else await player.pause();
         break;
       case "skip":
+        cancelFallback(player);
         await player.skip(0, false);
         break;
       case "previous": {
@@ -158,14 +169,15 @@ export async function handleNowPlayingButton(
           });
           return;
         }
-        await player.play({ clientTrack: prev });
+        cancelFallback(player);
+        await player.play({ clientTrack: prev, position: 0 });
         break;
       }
       case "stop":
-        if (player.queue.tracks.length > 0) {
-          await player.queue.splice(0, player.queue.tracks.length);
-        }
-        await player.skip(0, false).catch(() => {});
+        cancelFallback(player);
+        // stopPlaying (not skip) so autoplay and loop-queue don't start the next song.
+        if (player.queue.current) await player.stopPlaying(true, false);
+        else if (player.queue.tracks.length > 0) await player.queue.splice(0, player.queue.tracks.length);
         break;
       case "shuffle":
         await player.queue.shuffle();

@@ -1,5 +1,6 @@
 import type { Player, Track, UnresolvedTrack } from "lavalink-client";
 import { logger } from "../logger.js";
+import { hasPendingFailure } from "./fallback.js";
 
 /**
  * Autoplay / radio (spec §1 nice-to-have). Runs when the queue empties; if it
@@ -13,6 +14,8 @@ import { logger } from "../logger.js";
 export async function autoplayFunction(player: Player, lastTrack: Track | null): Promise<void> {
   if (player.getData<boolean>("autoplay_disabled") === true) return;
   if (!lastTrack?.info) return;
+  // The last track failed: the Layer-3 fallback replaces it instead of a "related" song.
+  if (hasPendingFailure(player, lastTrack)) return;
 
   const requester = (lastTrack as { requester?: unknown }).requester;
   const source = lastTrack.info.sourceName;
