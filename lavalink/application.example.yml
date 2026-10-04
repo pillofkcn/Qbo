@@ -62,33 +62,37 @@ plugins:
     allowSearch: true
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
-    # Clients are tried in order (Layer-1 internal fallback); order follows the upstream README
-    # (October 2026). ANDROID_VR needs no player-script cipher, so tracks start sooner and survive
-    # cipher breakage. Names change between versions — if Lavalink logs
-    # "Failed to resolve <CLIENT> into a Client", fix this list against the README:
+    # Clients are tried in order (Layer-1 internal fallback). Names change between versions — if
+    # Lavalink logs "Failed to resolve <CLIENT> into a Client", fix this list against the README:
     # https://github.com/lavalink-devs/youtube-source#available-clients
+    # Since mid-2026 YouTube answers most clients with "Sign in to confirm you're not a bot" /
+    # "requires login" or SABR-only formats; the combination that works upstream is TV + OAuth +
+    # remote cipher (below). TV is first because with OAuth it is the client that actually plays.
     clients:
       - MUSIC            # search only (ytmsearch), never used for playback
+      - TV               # needs OAuth (below)
       - ANDROID_VR
       - WEB
       - WEBEMBEDDED
       - TVHTML5_SIMPLY
-    # ── Optional reliability upgrades (leave commented for first boot) ──────
-    # OAuth: on first run the log prints a device code; authorise at
-    # https://google.com/device with a BURNER Google account, then paste the
-    # printed refresh token here.
-    # oauth:
-    #   enabled: true
-    #   refreshToken: "${YT_OAUTH_REFRESH_TOKEN}"
-    #   skipInitialization: true
-    # poToken — pair with a refresh/generated token if you hit bot checks:
+    # OAuth with a BURNER Google account (never your main one — it can get banned). Without a
+    # refresh token the plugin starts a device-code flow and logs "go to ... and enter code ...";
+    # scripts/install-services.ps1 shows that code, waits for the login, stores the logged refresh
+    # token in .env.local and restarts Lavalink. ${VAR:} = empty default if the variable is unset.
+    oauth:
+      enabled: true
+      refreshToken: "${YT_OAUTH_REFRESH_TOKEN:}"
+      skipInitialization: false
+    # Remote cipher (yt-cipher). The plugin no longer deciphers YouTube player scripts itself;
+    # install-services.ps1 runs yt-cipher locally as the "YtCipher" service on 127.0.0.1:8001.
+    remoteCipher:
+      url: "http://127.0.0.1:8001"
+      password: "${YT_CIPHER_PASSWORD:}"
+      userAgent: "qbo"
+    # poToken (optional; WEB/WEBEMBEDDED only, not needed with OAuth):
     # pot:
     #   token: "${YT_PO_TOKEN}"
     #   visitorData: "${YT_VISITOR_DATA}"
-    # Remote cipher server (recommended hardening) — run via docker-compose:
-    # remoteCipher:
-    #   url: "http://localhost:8001"
-    #   password: "${YT_CIPHER_PASSWORD}"
 
   lavasrc:
     # Layer-2 cross-source fallback chain. Tried in order until one returns audio.

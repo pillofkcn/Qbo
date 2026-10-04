@@ -13,6 +13,9 @@ import { clearNowPlaying, notify, startNowPlayingTicker, updateNowPlaying } from
 import { errorEmbed } from "../ui/embeds.js";
 import { handleTrackFinished, noteTrackStart, playedMs, recordFailure } from "./fallback.js";
 
+/** Discord voice close code: "E2EE/DAVE protocol required". */
+const DAVE_REQUIRED_CLOSE_CODE = 4017;
+
 /** Player destroys the users should hear about (the bot leaves the channel). */
 const DESTROY_NOTICES: Partial<Record<string, string>> = {
   [DestroyReasons.TrackErrorMaxTracksErroredPerTime]:
@@ -66,7 +69,7 @@ export function registerLavalinkEvents(client: Client): void {
     await clearNowPlaying(client, player);
   });
 
-  manager.on("playerSocketClosed", (player, payload) => {
+  manager.on("playerSocketClosed", async (player, payload) => {
     const level = payload.code >= 4000 ? "warn" : "info";
     logger[level](
       {
@@ -78,6 +81,19 @@ export function registerLavalinkEvents(client: Client): void {
       },
       "discord voice websocket closed",
     );
+    // Discord requires E2EE (DAVE) and Lavalink connected without it: nothing can be heard, and
+    // Lavalink would keep "playing" into a dead connection. Say why and leave.
+    if (payload.code === DAVE_REQUIRED_CLOSE_CODE) {
+      await notify(
+        client,
+        player,
+        errorEmbed(
+          "Discord rejected the voice connection (E2EE/DAVE required): Lavalink couldn't load its DAVE " +
+            "library. On Windows this is usually Smart App Control — see scripts/install-services.ps1.",
+        ),
+      );
+      await player.destroy("DaveUnavailable").catch(() => {});
+    }
   });
 
   // ── Layer-3 fallback (spec §3): record failures here, recover on the end event ──

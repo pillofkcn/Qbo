@@ -36,7 +36,7 @@ The architecture and design rationale are summarised in [Architecture](#architec
 
 ## Architecture
 
-Three local processes on one machine, communicating over `localhost`:
+Four local processes on one machine, communicating over `localhost`:
 
 ```
 Discord  <->  Node bot (discord.js)  <->  Lavalink.jar (Java, :2333)  <->  YouTube / Spotify / SoundCloud
@@ -45,9 +45,16 @@ Discord  <->  Node bot (discord.js)  <->  Lavalink.jar (Java, :2333)  <->  YouTu
 1. JDK 21 runs `Lavalink.jar` (the audio node on port 2333); it downloads its own plugins on first boot.
 2. Node 22 runs this bot, which connects to Lavalink at `localhost:2333` and to Discord.
 3. A small `spotify-tokener` process (port 8080) supplies Spotify's anonymous token so playlists and albums resolve reliably.
+4. `yt-cipher` (Deno, port 8001) solves YouTube's player-script signatures for Lavalink — the YouTube
+   plugin no longer does this itself. YouTube playback also needs a one-time OAuth login with a
+   **burner** Google account (the install script walks you through it).
 
-All three run **natively** (no Docker) for the lowest audio latency. A Docker `yt-cipher`
-container is available only as an optional YouTube-hardening fallback.
+All four run **natively** (no Docker) for the lowest audio latency.
+
+> **Windows: Smart App Control must be off.** It blocks `spotify-tokener.exe` and the DAVE
+> (end-to-end voice encryption) library Lavalink loads at runtime; without DAVE, Discord rejects the
+> voice connection (close code 4017) and nothing is heard. It has no per-app exceptions. The
+> install script checks this and stops with instructions.
 
 Running on a residential (home) IP is intentional: YouTube rate-limits datacenter IPs
 (403/429), so a home connection avoids that bot-flagging without a paid proxy.
@@ -61,7 +68,10 @@ Running on a residential (home) IP is intentional: YouTube rate-limits datacente
 | NSSM (for the 24/7 services) | `winget install NSSM.NSSM` |
 | Go (builds spotify-tokener) | `winget install GoLang.Go` |
 | Chrome (used by spotify-tokener) | `winget install Google.Chrome` |
+| Deno (runs yt-cipher) | `winget install DenoLand.Deno` |
 | Docker Desktop (optional) | only as a fallback for spotify-tokener / yt-cipher |
+
+`scripts/install-services.ps1` installs the required ones that are missing.
 
 ## Installation
 
@@ -169,16 +179,24 @@ git pull
 powershell -ExecutionPolicy Bypass -File .\scripts\install-services.ps1
 ```
 
-It installs missing prerequisites (JDK 21, Node.js, NSSM), runs `npm ci`, downloads
-`Lavalink.jar` and builds `spotify-tokener` if they're missing, syncs `lavalink/application.yml`
-from `application.example.yml` (the old copy is kept as a `.bak-*` file; pass
-`-KeepLavalinkConfig` to skip), then registers three services — `SpotifyTokener`, `Lavalink`, and
-`DiscordMusicBot` (shown as "Qbo - …" in `services.msc`) — that start automatically on boot
-(before login), restart on failure, and run headless. Finally it checks that Lavalink answers and
-prints the plugin versions it loaded. Re-run it after every `git pull`. Manage the services with:
+It stops if Smart App Control is on (see [Architecture](#architecture)), installs missing
+prerequisites (JDK 21, Node.js, NSSM, Deno), runs `npm ci`, downloads `Lavalink.jar` and builds
+`spotify-tokener` if they're missing, installs or updates `yt-cipher`, syncs
+`lavalink/application.yml` from `application.example.yml` (the old copy is kept as a `.bak-*` file;
+pass `-KeepLavalinkConfig` to skip), then registers four services — `YtCipher`, `SpotifyTokener`,
+`Lavalink`, and `DiscordMusicBot` (shown as "Qbo - …" in `services.msc`) — that start automatically
+on boot (before login), restart on failure, and run headless. It checks that each one answers and
+prints the Lavalink plugin versions.
+
+**First run only — YouTube login:** the script prints a URL and a code. Open it on any device, sign
+in with a **burner** Google account (never your main one — it can get banned), and enter the code.
+The script picks up the refresh token, stores it in `.env.local` (server-only, not in git) and
+restarts Lavalink. Re-run the script if the code expires.
+
+Re-run it after every `git pull`. Manage the services with:
 
 ```powershell
-nssm restart SpotifyTokener ; nssm restart Lavalink ; nssm restart DiscordMusicBot
+nssm restart YtCipher ; nssm restart SpotifyTokener ; nssm restart Lavalink ; nssm restart DiscordMusicBot
 nssm status  DiscordMusicBot
 Invoke-RestMethod http://localhost:8080/api/token   # check the token service is alive
 ./scripts/uninstall-services.ps1                    # remove the services
@@ -235,7 +253,9 @@ end with "Couldn't play …" — the bot skips the track rather than playing a d
 |---|---|
 | Slash commands don't appear | Run `npm run deploy`; set `DEV_GUILD_ID` for instant registration |
 | "I'm already in another voice channel" | The bot is playing elsewhere — use `/disconnect` or join it |
-| YouTube fails (403/429) | Enable OAuth or yt-cipher ([`lavalink/README.md`](lavalink/README.md)); the bot-level fallback tries other sources meanwhile |
+| Silence; bot posts "Discord rejected the voice connection (E2EE/DAVE required)" / log `code 4017` | Lavalink couldn't load its DAVE library — turn off Smart App Control, re-run `install-services.ps1` |
+| `SpotifyTokener` stopped, NSSM event "An Application Control policy has blocked this file" | Smart App Control — turn it off, re-run `install-services.ps1` |
+| YouTube: "Sign in to confirm you're not a bot" / "requires login" / "All clients failed" | Check the `YtCipher` service runs and the YouTube login is done (`YT_OAUTH_REFRESH_TOKEN` in `.env.local`; delete the line and re-run the script for a new login) |
 | Tracks stop a few seconds in, now-playing message vanishes | Outdated `youtube-plugin` — update it in `lavalink/application.yml` ([`lavalink/README.md`](lavalink/README.md) §6) |
 | Spotify finds no audio (esp. playlists) | Check the `SpotifyTokener` service: `Invoke-RestMethod http://localhost:8080/api/token` should return a token |
 | `/lyrics` returns nothing | Ensure `lavalyrics-plugin` is installed in `application.yml` |

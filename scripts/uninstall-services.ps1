@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Stop and remove the Lavalink + DiscordMusicBot + SpotifyTokener Windows services.
+  Stop and remove the DiscordMusicBot + Lavalink + SpotifyTokener + YtCipher Windows services.
 .DESCRIPTION
   Run from an elevated (Administrator) PowerShell.
 #>
@@ -10,7 +10,7 @@ $admin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
     ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $admin) { throw "Please run this script in an elevated (Administrator) PowerShell." }
 
-foreach ($name in @("DiscordMusicBot", "Lavalink", "SpotifyTokener")) {
+foreach ($name in @("DiscordMusicBot", "Lavalink", "SpotifyTokener", "YtCipher")) {
     if (Get-Service $name -ErrorAction SilentlyContinue) {
         Write-Host "Removing service '$name'..." -ForegroundColor Yellow
         & nssm stop $name | Out-Null

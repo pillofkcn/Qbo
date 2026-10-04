@@ -53,18 +53,20 @@ Confirm in the log:
 Press `Ctrl+C` to stop. For 24/7 operation, install it as a service instead — see
 `scripts/install-services.ps1` in the repo root.
 
-## 5. (Optional) YouTube reliability upgrades
+## 5. YouTube: remote cipher + OAuth (required since mid-2026)
 
-You only need these if YouTube starts throwing bot checks even on your home IP.
+YouTube now answers most clients with "Sign in to confirm you're not a bot" / "requires
+login" or SABR-only formats, and the plugin no longer deciphers YouTube's player scripts
+itself. What works: the `TV` client with OAuth plus a remote cipher server — both are
+enabled in `application.example.yml`, and `scripts/install-services.ps1` sets them up:
 
-**OAuth (burner Google account):** uncomment the `youtube.oauth` block in
-`application.yml`, set `enabled: true`, run Lavalink, open <https://google.com/device>,
-enter the printed code with a **throwaway** Google account, then paste the printed
-refresh token back into the config.
-
-**Remote cipher (yt-cipher):** from the repo root run `docker compose up -d yt-cipher`,
-set `YT_CIPHER_PASSWORD` in `.env`, then uncomment the `youtube.remoteCipher` block
-(`url: http://localhost:8001`).
+- **Remote cipher (yt-cipher):** installed by `scripts/get-yt-cipher.ps1` and run as the
+  `YtCipher` service on `127.0.0.1:8001`. Its password (`YT_CIPHER_PASSWORD`) is generated
+  into `.env.local`. (Docker alternative: `docker compose up -d yt-cipher`.)
+- **OAuth (burner Google account):** without `YT_OAUTH_REFRESH_TOKEN`, Lavalink logs a URL
+  and code; the install script shows them, waits until you sign in at the URL with a
+  **throwaway** Google account (never your main one), then saves the logged refresh token
+  to `.env.local` and restarts Lavalink. For a new login, delete that line and re-run.
 
 ## 6. Updating plugins
 
