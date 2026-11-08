@@ -144,6 +144,12 @@ describe("chunk", () => {
     assert.deepEqual(pages.flat(), queue);
   });
 
+  it("rejects a page size that would never advance, instead of looping forever", () => {
+    for (const size of [0, -3, Number.NaN, 2.5]) {
+      assert.throws(() => chunk([1, 2, 3], size), RangeError, `size ${size}`);
+    }
+  });
+
   it("does not modify the input", () => {
     const queue = [1, 2, 3, 4];
     chunk(queue, 3);
