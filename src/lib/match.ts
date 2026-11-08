@@ -89,6 +89,7 @@ function isPreview(track: Track, original: TrackMeta): boolean {
   if (track.info.sourceName !== "soundcloud") return false;
   return (
     track.info.identifier.includes("/preview/") ||
+    // Unreachable today: pickReplacement's length tolerance already rejects any ~30 s candidate for an original over 45 s.
     (Math.abs(track.info.duration - PREVIEW_MS) <= 1_000 && original.durationMs > 45_000)
   );
 }
