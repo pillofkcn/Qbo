@@ -12,7 +12,8 @@
     "start": "tsx src/index.ts",
     "deploy": "tsx src/deploy-commands.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "test": "node --import tsx --test \"test/**/*.test.ts\""
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
