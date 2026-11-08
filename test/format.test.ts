@@ -90,6 +90,30 @@ describe("truncate", () => {
   it("is only the ellipsis when max is 1", () => {
     assert.equal(truncate("hello", 1), "…");
   });
+
+  it("never cuts an emoji in half", () => {
+    // Each emoji straddles the cut: max counts UTF-16 code units, so a naive slice lands inside it.
+    assert.equal(truncate("ab😀cd", 4), "ab…"); // surrogate pair
+    assert.equal(truncate("a👩‍💻b", 4), "a…"); // ZWJ sequence
+    assert.equal(truncate("ab🇸🇰cd", 5), "ab…"); // flag (two regional indicators)
+    assert.equal(truncate("ok👍🏽!!", 5), "ok…"); // skin-tone modifier
+  });
+
+  it("keeps an emoji that fits in the budget", () => {
+    assert.equal(truncate("ab😀cd", 5), "ab😀…");
+  });
+
+  it("cuts only on character boundaries and stays within max, for every max", () => {
+    const title = "Café ☕ – 👩‍💻 coding 🇸🇰 vibes 👍🏽🔥 (live)";
+    const graphemes = new Intl.Segmenter("en", { granularity: "grapheme" });
+    const boundaries = new Set([...graphemes.segment(title)].map((s) => s.index).concat(title.length));
+    for (let max = 1; max < title.length; max++) {
+      const out = truncate(title, max);
+      const kept = out.slice(0, -1);
+      assert.ok(out.length <= max, `max ${max} gave ${JSON.stringify(out)}`);
+      assert.ok(title.startsWith(kept) && boundaries.has(kept.length), `max ${max} split a character: ${JSON.stringify(out)}`);
+    }
+  });
 });
 
 describe("chunk", () => {

@@ -22,10 +22,24 @@ export function progressBar(position: number, duration: number, size = 18): stri
   return bar;
 }
 
-/** Truncate to `max` chars with an ellipsis. */
+/** Locale fixed so the result never depends on the host's default locale. */
+const graphemes = new Intl.Segmenter("en", { granularity: "grapheme" });
+
+/**
+ * Truncate to `max` UTF-16 code units (the ellipsis counts toward `max`), cutting
+ * only between whole characters so emoji like 👩‍💻, 🇸🇰 or 👍🏽 never come out broken.
+ */
 export function truncate(text: string, max = 60): string {
   if (!text) return "";
-  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+  if (!(text.length > max)) return text;
+  // Same budget as the former slice(0, max - 1), including its negative-index meaning for max < 1.
+  const budget = max - 1 < 0 ? Math.max(text.length + max - 1, 0) : max - 1;
+  let end = 0;
+  for (const { index, segment } of graphemes.segment(text)) {
+    if (index + segment.length > budget) break;
+    end = index + segment.length;
+  }
+  return `${text.slice(0, end).trimEnd()}…`;
 }
 
 /** Split an array into chunks of `size`. */
