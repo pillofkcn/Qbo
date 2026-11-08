@@ -20,7 +20,7 @@ const command: Command = {
       await replyError(interaction, "This command only works in a server.");
       return;
     }
-    const guildId = interaction.guildId!;
+    const guildId = interaction.guildId;
     const on = interaction.options.getString("state", true) === "on";
     setAutoplay(guildId, on);
     // Apply immediately to the live player, if any.

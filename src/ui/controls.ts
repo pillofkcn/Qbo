@@ -50,7 +50,7 @@ async function fetchTextChannel(
 ): Promise<GuildTextBasedChannel | null> {
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (channel && channel.isTextBased() && !channel.isDMBased()) {
-    return channel as GuildTextBasedChannel;
+    return channel;
   }
   return null;
 }

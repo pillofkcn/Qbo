@@ -65,7 +65,7 @@ export function fallbackEmbed(
 
 /** The now-playing embed (progress bar, source, requester, loop & volume). */
 export function nowPlayingEmbed(player: Player): EmbedBuilder {
-  const track = player.queue.current as Track | null;
+  const track = player.queue.current;
   if (!track) {
     return new EmbedBuilder().setColor(ACCENT).setDescription("Nothing is playing right now.");
   }
@@ -143,7 +143,7 @@ export function addedPlaylistEmbed(
 
 /** Build the paginated `/queue` embeds (10 per page) — spec §10. */
 export function buildQueueEmbeds(player: Player, perPage = 10): EmbedBuilder[] {
-  const current = player.queue.current as Track | null;
+  const current = player.queue.current;
   const upcoming = player.queue.tracks as AnyTrack[];
 
   const remainingCurrent =

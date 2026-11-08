@@ -24,7 +24,7 @@ export async function autoplayFunction(player: Player, lastTrack: Track | null):
     if (source === "spotify") {
       const ids = [
         lastTrack.info.identifier,
-        ...(player.queue.previous as Track[])
+        ...player.queue.previous
           .filter((t) => t.info.sourceName === "spotify")
           .map((t) => t.info.identifier),
       ].filter(Boolean);

@@ -27,10 +27,6 @@ export default defineConfig(
       // synchronous throw into a logged rejection instead of throwing into the
       // emitter. Dropping the keyword would change behaviour.
       "@typescript-eslint/require-await": "off",
-
-      // Style only: redundant `as` casts are erased at compile time.
-      // `eslint --fix` removes them all if this is turned back on.
-      "@typescript-eslint/no-unnecessary-type-assertion": "off",
     },
   },
   {
