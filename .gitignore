@@ -2,7 +2,8 @@
 node_modules/
 
 # Secrets & env
-# NOTE: .env is intentionally committed (synced to the home server via git, by owner's choice)
+# Never commit real secrets. Copy .env to the server by hand (not via git).
+.env
 .env.*
 !.env.example
 
